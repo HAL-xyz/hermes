@@ -97,7 +97,7 @@ func HandleRequest(ctx context.Context, event events.CloudWatchEvent) {
 
 	fmt.Printf("DELTAS: WaT: %d, WaC: %d, WaE: %d\n", deltaWaT, deltaWaC, deltaWaE)
 
-	if deltaWaT > 16 || deltaWaC > 16 || deltaWaE > 16 {
+	if deltaWaT > 16 || deltaWaC > 32 || deltaWaE > 16 {
 		panic("Zoroaster is more than 16 blocks behind Infura")
 	}
 }
