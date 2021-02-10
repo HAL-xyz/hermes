@@ -19,6 +19,7 @@ const (
 	dbUsr   = "DB_USR"
 	dbPwd   = "DB_PWD"
 	ethNode = "HERMES_ETH_NODE"
+	network = "HERMES_NETWORK"
 )
 
 type Config struct {
@@ -27,6 +28,7 @@ type Config struct {
 	dbPass  string
 	dbName  string
 	ethNode string
+	network string
 }
 
 func loadConfig() Config {
@@ -37,11 +39,11 @@ func loadConfig() Config {
 	conf.dbPass = os.Getenv(dbPwd)
 	conf.dbUser = os.Getenv(dbUsr)
 	conf.ethNode = os.Getenv(ethNode)
+	conf.network = os.Getenv(network)
 
-	if conf.ethNode == "" {
-		panic("no node found in HERMES_ETH_NODE")
+	if conf.ethNode == "" || conf.network == "" {
+		panic("HERMES_ETH_NODE and/or NETWORK not found")
 	}
-
 	return conf
 }
 
@@ -61,9 +63,9 @@ func connectDB(c Config) {
 	}
 }
 
-func readLastBlocksProcessed(tgType string) int {
+func readLastBlocksProcessed(tgType, network string) int {
 	var blockNo int
-	q := fmt.Sprintf(`SELECT %s_last_block_processed FROM state WHERE network_id ='%s'`, tgType, "1_eth_mainnet")
+	q := fmt.Sprintf(`SELECT %s_last_block_processed FROM state WHERE network_id ='%s'`, tgType, network)
 	err := db.QueryRow(q).Scan(&blockNo)
 	if err != nil {
 		panic(err)
@@ -71,7 +73,7 @@ func readLastBlocksProcessed(tgType string) int {
 	return blockNo
 }
 
-func fetchLastBlockFromInfura(url string) int {
+func fetchLastBlockFromControlNode(url string) int {
 	cli := ethrpc.New(url)
 	lastSeen, err := cli.EthBlockNumber()
 	if err != nil {
@@ -86,21 +88,21 @@ func HandleRequest(ctx context.Context, event events.CloudWatchEvent) {
 	connectDB(config)
 	defer db.Close()
 
-	lastWaT := readLastBlocksProcessed("wat")
-	lastWaC := readLastBlocksProcessed("wac")
-	lastWaE := readLastBlocksProcessed("wae")
+	lastWaT := readLastBlocksProcessed("wat", config.network)
+	lastWaC := readLastBlocksProcessed("wac", config.network)
+	lastWaE := readLastBlocksProcessed("wae", config.network)
 
-	lastInfura := fetchLastBlockFromInfura(config.ethNode)
-	fmt.Println("=> last block fetched from Infura: ", lastInfura)
+	lastBlockFromControl := fetchLastBlockFromControlNode(config.ethNode)
+	fmt.Println("=> last block from control node: ", lastBlockFromControl)
 
-	deltaWaT := lastInfura - lastWaT
-	deltaWaC := lastInfura - lastWaC
-	deltaWaE := lastInfura - lastWaE
+	deltaWaT := lastBlockFromControl - lastWaT
+	deltaWaC := lastBlockFromControl - lastWaC
+	deltaWaE := lastBlockFromControl - lastWaE
 
 	fmt.Printf("DELTAS: WaT: %d, WaC: %d, WaE: %d\n", deltaWaT, deltaWaC, deltaWaE)
 
 	if deltaWaT > 20 || deltaWaC > 20 || deltaWaE > 20 {
-		panic("Zoroaster is more than 20 blocks behind Infura")
+		panic("Zoroaster is more than 20 blocks behind control node")
 	}
 }
 
